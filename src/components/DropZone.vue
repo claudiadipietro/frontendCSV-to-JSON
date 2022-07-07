@@ -1,6 +1,13 @@
 <template>
   <div class="drop-zone">
+    <h2>
+      {{title}}
+    </h2>
+    <h4 class="restart" v-if="this.data" v-on:click="restart">
+      Click here to restart
+    </h4>
     <input
+      v-if="!this.data"
       type="file"
       id="assetsFieldHandle"
       ref="file"
@@ -9,8 +16,14 @@
       @change="uploadFile"
       @dragover="dragover"
       @dragleave="dragleave"
+      @drop="dragleave"
     />
-    <label for="file">Click me or drag a CSV file</label>
+    <label v-if="!this.data" for="file">
+      Click me or drag a CSV file
+    </label>
+    <div class="dataFormatted">
+      {{ formatterData }}
+    </div>
   </div>
 </template>
 
@@ -19,20 +32,34 @@ import axios from 'axios';
 
 export default {
   name: 'DropZone',
-  delimiters: ['${', '}'],
   data() {
-    return { 
-      filelist: [],
+    return {
+      fileList: [],
       isDropping: false,
+      isDropped: false,
+      data: null,
     }
   },
   computed: {
     dropClass() {
       if (this.isDropping) {
         return 'drop-zone-input dropping'
-      } else {
-        return 'drop-zone-input'
+      } else if (this.isDropped) {
+        return 'drop-zone-input dropped'
       }
+      return 'drop-zone-input'
+    },
+    formatterData(){
+      if (!this.data) {
+        return ''
+      }
+      return JSON.stringify(this.data, null, '\t')
+    },
+    title(){
+      if (!this.data) {
+        return 'Drop a CSV file here'
+      }
+      return 'You can find the CSV data as a JSON below'
     }
   },
   methods: {
@@ -40,29 +67,39 @@ export default {
       const file = this.$refs.file.files[0];
       if (file.type !== "text/csv") {
         alert('Please upload a CSV file')
-      } else{
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = function(){
-          const base64String = reader.result
-            .replace('data:', '')
-            .replace(/^.+,/, '')
-          axios.post('http://localhost:8080/api/csv', {
-            base64File: base64String
-          })
-          .then(function (response) {
-            const data = response.data;
-            console.log(data);
-          })
-        }
+        return
+      }
+      this.encodeFile(file);
+    },
+    encodeFile(file){
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      const handleEncodedFile = this.handleEncodedFile;
+      reader.onload = function() {
+        handleEncodedFile(reader.result);
       }
     },
-    handleFile(){},
-    postFile(){},
+    handleEncodedFile(encodeFile){
+      const base64File = encodeFile
+        .replace('data:', '')
+        .replace(/^.+,/, '');
+      this.postFile(base64File);
+    },
+    postFile(base64File){
+      const axiosPromise = axios.post(
+        'http://localhost:8080/api/csv',
+        { base64File: base64File }
+      )
+      axiosPromise.then(response => this.data = response.data)
+    },
     dragover() {
       this.isDropping = true;
     },
     dragleave() {
+      this.isDropping = false;
+    },
+    restart(){
+      this.data = null;
       this.isDropping = false;
     }
   }
@@ -76,6 +113,7 @@ export default {
   border-color: #0000ff00;
 }
 .drop-zone {
+  white-space: pre;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -89,9 +127,22 @@ export default {
   border-radius: 15px;
   cursor: pointer;
   z-index: 2;
+  border: 1px dashed #070255;
 }
 .dropping{
   background-color: #00ff8014;
+  border: 1px solid #0466357c;
+}
+.dropped{
+  border-color: green
+}
+.dataFormatted{
+  text-align: start;
+  padding: 4rem;
+}
+.restart{
+  cursor: pointer;
+  color: #0000ff70;
 }
 label{
   cursor: pointer;
